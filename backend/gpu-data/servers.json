@@ -1,0 +1,9 @@
+{
+  "servers": [
+    {
+      "ip": "10.45.155.201",
+      "username": "test",
+      "password": "test"
+    }
+  ]
+}

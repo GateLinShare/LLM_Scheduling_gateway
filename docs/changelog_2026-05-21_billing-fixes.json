@@ -1,0 +1,178 @@
+{
+  "version": "1.0",
+  "date": "2026-05-21",
+  "author": "Claude Code",
+  "summary": "修复计费逻辑、实现降质功能、添加登录机制和UI优化",
+  "features": [
+    {
+      "id": "F1",
+      "title": "用户登录机制",
+      "description": "实现基于 API Key 的登录系统，支持 localStorage 缓存和自动跳转。用户首次访问或 API Key 失效时自动跳转到登录页，登录成功后缓存凭证，避免重复输入。",
+      "files": [
+        {
+          "path": "frontend/src/app/login/page.tsx",
+          "changes": [
+            "新增独立登录页面组件",
+            "实现 API Key 验证逻辑，调用 /api/me 端点验证",
+            "成功登录后将 API Key 保存到 localStorage",
+            "页面加载时检查缓存的 API Key 是否有效，有效则自动跳转到主页",
+            "增强错误处理：网络错误、401未授权、503服务不可用、超时等场景的友好提示"
+          ]
+        },
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "添加 useRouter 导入和 router 实例",
+            "useEffect 中从 localStorage 加载 API Key，无缓存时跳转登录页",
+            "API Key 变化时自动保存到 localStorage",
+            "fetchMe 失败且返回 401 时清除缓存并跳转登录页",
+            "添加 handleLogout 函数：清除 localStorage、重置状态、跳转登录页",
+            "头部添加退出登录按钮"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "模型降质配置 UI",
+      "description": "在模型配置界面添加降质模型设置区域，允许管理员配置当用户额度超限时自动切换到备用模型。降质请求不计费、不消耗 token，仅做纯转发。",
+      "files": [
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "ModelConfig 接口添加 degrade 字段（enabled, api_url, model_name, api_key）",
+            "emptyModelForm 添加降质相关默认值",
+            "openModelModal 函数加载现有降质配置到表单",
+            "saveModel 函数将表单数据序列化为 degrade 配置对象",
+            "模型配置模态框添加降质设置区域：启用开关、API URL、模型名称、API Key 输入框"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F3",
+      "title": "时间段价格倍率配置 UI",
+      "description": "添加四个时间段的价格倍率设置，支持按工作日高峰、工作日平峰、夜间、周末设置不同的价格倍率，实现分时计费。",
+      "files": [
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "ModelConfig 接口添加 price_multipliers 字段（weekday_peak, weekday_flat, night, weekend）",
+            "emptyModelForm 添加四个时间段倍率默认值（1.5, 1.0, 0.3, 0.3）",
+            "openModelModal 函数加载现有倍率配置",
+            "saveModel 函数将倍率数据序列化为 price_multipliers 对象",
+            "模型配置模态框添加时间段倍率设置区域：四个输入框对应四个时间段"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F4",
+      "title": "保存提示优化",
+      "description": "将系统设置和模型配置保存成功提示从浏览器 alert 改为自定义居中弹窗，提升用户体验。弹窗 3 秒自动消失，背景不变暗，可手动关闭。",
+      "files": [
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "添加 toast 状态：{ message: string; type: 'success' | 'error' | 'info' } | null",
+            "添加 showToast 函数：设置 toast 状态，3秒后自动清除",
+            "saveModel 和 saveConfig 函数调用 showToast 替代 setMessage",
+            "渲染层添加 toast 弹窗：固定定位、居中显示、半透明背景、可点击关闭"
+          ]
+        },
+        {
+          "path": "frontend/src/app/globals.css",
+          "changes": [
+            "添加 @keyframes fade-in 动画定义：从上方淡入",
+            "添加 .animate-fade-in 类：应用 0.3s 淡入动画"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F5",
+      "title": "模型统计数字格式优化",
+      "description": "模型统计图表不再使用 k 单位，改为显示完整数字并每三位添加逗号分隔符（如 1,000,000），提升可读性。",
+      "files": [
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "ModelDailyChart 组件：移除 / 1000 计算，直接使用原始 token 数",
+            "ModelDailyChart 组件：移除 yUnit='k' 参数",
+            "Chart 组件 yTickFmt 函数：无 yUnit 时使用 toLocaleString() 格式化",
+            "Chart 组件 tooltipFmt 函数：无 yUnit 时使用 toLocaleString() 格式化"
+          ]
+        }
+      ]
+    }
+  ],
+  "bugfixes": [
+    {
+      "id": "B1",
+      "title": "时间段倍率计算错误",
+      "description": "23:00-24:00 时间段被错误地归类为工作日平峰（倍率 1.0），实际应该是夜间（倍率 0.3）。修复条件判断从 < 24 改为 < 23。",
+      "file": "backend/usage_module.py",
+      "fix": "将工作日平峰时间段判断从 18 <= hour < 24 改为 18 <= hour < 23，确保 23:00-24:00 落入夜间时段"
+    },
+    {
+      "id": "B2",
+      "title": "降质配置缺少 URL 格式验证",
+      "description": "降质 API URL 没有格式验证，可能导致无效 URL 被保存。添加 URL 格式检查，确保以 http:// 或 https:// 开头。",
+      "file": "backend/queue_middleware.py",
+      "fix": "在 _degrade_config 函数中添加 URL 格式验证：检查 api_url 是否以 http:// 或 https:// 开头，不符合则记录错误日志并返回 None"
+    },
+    {
+      "id": "B3",
+      "title": "降质触发条件重复判断",
+      "description": "降质触发逻辑分散在多处，存在 _quota_exceeded 和 _quota_rejected 的重复判断。统一为单一条件：_quota_rejected 或 _daily_quota_exceeded。",
+      "file": "backend/queue_middleware.py",
+      "fix": "合并降质触发条件为 should_degrade = (user.get('_quota_rejected') or user.get('_daily_quota_exceeded')) and _user_priority(user) != 1，移除重复的错误响应逻辑"
+    },
+    {
+      "id": "B4",
+      "title": "降质请求触发计费（关键缺陷）",
+      "description": "降质请求调用了 usage_module.record_usage_and_conversation，导致降质请求被计费、消耗 token 额度。降质的设计初衷是纯转发，不应触发任何计费。",
+      "file": "backend/queue_middleware.py",
+      "fix": "完全移除 _forward_degraded_request 中的所有计费逻辑：删除 token 计数、价格计算、usage_module 调用。流式和非流式响应都改为纯转发，不记录任何用量数据。删除 _record_degraded_usage 函数。"
+    },
+    {
+      "id": "B5",
+      "title": "队列选择函数返回值类型不明确",
+      "description": "_choose_queue_by_load 函数缺少返回类型注解，导致调用方难以理解返回值结构。",
+      "file": "backend/queue_middleware.py",
+      "fix": "为 _choose_queue_by_load 函数添加返回类型注解：tuple[str | None, float, dict | None]"
+    },
+    {
+      "id": "B6",
+      "title": "Redis 负载计数存在竞态条件",
+      "description": "_increment_queue_load 和 _decrement_queue_load 函数使用单独的 Redis 命令，在高并发场景下可能出现竞态条件。",
+      "file": "backend/queue_middleware.py",
+      "fix": "使用 Redis pipeline 包装负载增减操作：_increment_queue_load 中使用 pipeline.zincrby + pipeline.expire，_decrement_queue_load 中使用 pipeline.zincrby + pipeline.zrange，确保原子性"
+    },
+    {
+      "id": "B7",
+      "title": "数据库计费事务缺少隔离级别",
+      "description": "write_usage_and_conversation 函数的事务使用默认隔离级别，在高并发场景下可能出现脏读或幻读，导致 quota_used 计算不准确。",
+      "file": "backend/db_module.py",
+      "fix": "将事务隔离级别设置为 serializable：connection.transaction(isolation='serializable')，确保计费更新的原子性和一致性"
+    },
+    {
+      "id": "B8",
+      "title": "请求超时时 Redis 资源未完全清理",
+      "description": "_wait_for_result 函数在请求超时时只清理了部分 Redis 键，可能导致 stream:*, stream_done:*, stream_model:* 等键泄漏。",
+      "file": "backend/queue_middleware.py",
+      "fix": "在超时处理中使用 r.delete() 清理所有相关键：result:*, stream:*, stream_done:*, stream_model:*, request_meta:*, request_body:*"
+    }
+  ],
+  "config_changes": {
+    "frontend/.env.local": {
+      "NEXT_PUBLIC_API_BASE_URL": "http://localhost:7103"
+    }
+  },
+  "key_concepts": {
+    "时间段划分": "工作日高峰 09:00-18:00（倍率1.5），工作日平峰 18:00-23:00（倍率1.0），夜间 23:00-09:00（倍率0.3），周末全天（倍率0.3）。注意 23:00 是夜间的起点，不是平峰的终点。",
+    "降质触发条件": "当用户满足 _quota_rejected 或 _daily_quota_exceeded 且优先级不为 1 时触发降质。Priority 1 用户永不降质。",
+    "降质计费规则": "降质请求是纯转发，不触发任何计费、token 计数或用量记录。只记录模型使用次数（model_usage），不记录 usage_logs 和 conversation_logs。",
+    "localStorage 缓存": "API Key 保存在浏览器 localStorage 中，key 为 'api_key'。页面加载时自动读取，API Key 变化时自动保存。401 错误时清除缓存并跳转登录页。"
+  }
+}

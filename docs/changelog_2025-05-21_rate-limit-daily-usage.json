@@ -1,0 +1,179 @@
+{
+  "version": "1.0",
+  "date": "2025-05-21",
+  "author": "Claude Code",
+  "summary": "新增限速额度控制、当日用量统计、模型图表改用输入Token数",
+  "features": [
+    {
+      "id": "F1",
+      "title": "当日用量统计列",
+      "description": "用量统计表新增'当日用量'列，显示自凌晨1点起的 total_price 累计值",
+      "files": [
+        {
+          "path": "backend/db_module.py",
+          "changes": [
+            "get_usage_summary() SQL 新增 daily_price 字段：使用 CASE WHEN + day_boundary_expr 计算当日 total_price",
+            "day_boundary_expr = \"((created_at AT TIME ZONE 'Asia/Shanghai') - interval '1 hour')::date\"",
+            "today_boundary = (adjusted_now() - timedelta(hours=1)).date()"
+          ]
+        },
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "UsageRow 接口新增 daily_price: number",
+            "UsageTable 表头新增'当日用量'列，位于'价格'和'请求数'之间",
+            "单元格渲染：Number(row.daily_price || 0).toFixed(6)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "额度限速（窗口+每日）",
+      "description": "新增基于 total_price 的窗口额度限速和每日额度限速，支持分别设置超额处理方式（降级优先级/拒绝请求）",
+      "files": [
+        {
+          "path": "backend/runtime_config.py",
+          "changes": [
+            "rate_limit 默认配置新增：daily_quota_limit=20, window_quota_limit=0.36, window_quota_action='limit', daily_quota_action='limit'"
+          ]
+        },
+        {
+          "path": "backend/db_module.py",
+          "changes": [
+            "新增 check_user_quota_limits(user_id, cutoff_time, day_start) 函数",
+            "单条 SQL 用 CASE WHEN 分别统计 daily_price 和 window_price",
+            "返回 {daily_price: float, window_price: float}"
+          ]
+        },
+        {
+          "path": "backend/auth_module.py",
+          "changes": [
+            "_with_effective_priority() 完整重写限速逻辑：",
+            "1. 优先级1用户直接返回，不受限速",
+            "2. asyncio.gather 并行查询 count_user_requests_since + check_user_quota_limits",
+            "3. 请求次数超 request_threshold → 按 window_quota_action 处理",
+            "4. window_price >= window_quota_limit → 按 window_quota_action 处理",
+            "5. daily_price >= daily_quota_limit → 按 daily_quota_action 处理",
+            "6. action='reject' 时设置 user['_quota_rejected']=True",
+            "7. action='limit' 时降级 user['priority']=downgraded_priority"
+          ]
+        },
+        {
+          "path": "backend/queue_middleware.py",
+          "changes": [
+            "dispatch() 中 _quota_exceeded 检查后新增 _quota_rejected 检查，返回'使用额度超限，请求被拒绝'",
+            "_forward_request() 中同样新增 _quota_rejected 检查（补漏）"
+          ]
+        },
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "新增 state: dailyQuotaLimit, windowQuotaLimit, windowQuotaAction, dailyQuotaAction",
+            "限速设置6字段：统计窗口 / 窗口内请求次数 / 窗口使用额度 / 每日使用额度 / 降级后优先级 / 窗口超额处理 / 每日超额处理",
+            "降级后优先级：仅当 window_quota_action 和 daily_quota_action 均为 reject 时灰化禁用",
+            "fetchConfig 读取 window_quota_action / daily_quota_action，默认 'limit'",
+            "saveConfig 保存 window_quota_action / daily_quota_action",
+            "说明文字包含额度计算示例和日界1点说明"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F3",
+      "title": "模型统计图表改用输入Token数",
+      "description": "模型统计图表Y轴从请求数改为输入Token数，单位k（千）",
+      "files": [
+        {
+          "path": "backend/db_module.py",
+          "changes": [
+            "get_model_daily_requests() SQL 改为 SUM(prompt_tokens)，字段名 prompt_tokens",
+            "count_map 改用 prompt_tokens 值",
+            "返回字段从 request_count 改为 prompt_tokens"
+          ]
+        },
+        {
+          "path": "frontend/src/app/page.tsx",
+          "changes": [
+            "ModelDailyRow 接口：request_count → prompt_tokens",
+            "ModelDailyChart 数据值除以1000（token→k）",
+            "Chart 组件新增 yUnit 属性，Y轴和 Tooltip 显示 k 后缀",
+            "title 改为'最近 30 天输入 Token 数'"
+          ]
+        }
+      ]
+    }
+  ],
+  "bugfixes": [
+    {
+      "id": "B1",
+      "title": "_forward_request 路径缺少 _quota_rejected 检查",
+      "description": "非 /v1/chat/completions 的转发路径（如 /v1/embeddings）只检查了 _quota_exceeded，遗漏了 _quota_rejected，导致额度限速 reject 动作对该路径无效",
+      "file": "backend/queue_middleware.py",
+      "fix": "在 _quota_exceeded 检查后新增 user.get('_quota_rejected') 检查"
+    },
+    {
+      "id": "B2",
+      "title": "图表Y轴大数值显示为0",
+      "description": "Token数值过大时Y轴刻度无法正常显示，全部显示为0",
+      "file": "frontend/src/app/page.tsx",
+      "fix": "数据值除以1000，Y轴单位改为k"
+    },
+    {
+      "id": "B3",
+      "title": "Tooltip formatter TypeScript 类型错误",
+      "description": "recharts Tooltip formatter 参数类型为 ValueType | undefined，与显式 number 类型不兼容",
+      "file": "frontend/src/app/page.tsx",
+      "fix": "formatter 参数改为 any，内部 Number() 转换保证安全"
+    },
+    {
+      "id": "B4",
+      "title": "前端保存额度限制时 fallback 值错误",
+      "description": "saveConfig 中 window_quota_limit 使用 || 2（默认应为0.36），daily_quota_limit 使用 || 20。当用户设为0（表示禁用）时，|| 会将0视为falsy并替换为fallback值，导致无法通过设0来禁用额度限制",
+      "file": "frontend/src/app/page.tsx",
+      "fix": "改用 ?? 运算符：Number(windowQuotaLimit ?? 0.36)、Number(dailyQuotaLimit ?? 20)，仅在 null/undefined 时使用默认值"
+    },
+    {
+      "id": "B5",
+      "title": "check_user_quota_limits SQL 缺少时间范围过滤",
+      "description": "WHERE 子句仅按 user_id 过滤，无时间下界，会扫描该用户全部历史记录，随数据增长性能下降",
+      "file": "backend/db_module.py",
+      "fix": "添加 AND created_at >= LEAST(cutoff_time, day_start) 限制扫描范围，利用 idx_gateway_usage_logs_user_time 索引"
+    },
+    {
+      "id": "B6",
+      "title": "check_user_quota_limits 时区处理与 get_usage_summary 不一致",
+      "description": "check_user_quota_limits 用 naive datetime 直接比较 TIMESTAMPTZ 列判断当日范围，而 get_usage_summary 使用 AT TIME ZONE 'Asia/Shanghai' 显式转换。当 PostgreSQL session timezone 非 Asia/Shanghai 时，两者计算的'当日'范围不一致，限速判断与前端显示的当日用量对不上",
+      "file": "backend/db_module.py",
+      "fix": "改用与 get_usage_summary 相同的 day_boundary_expr SQL 表达式计算当日价格，传入 today_boundary date 而非 naive datetime"
+    },
+    {
+      "id": "B7",
+      "title": "request_threshold=0 时语义与 quota_limit=0 不一致",
+      "description": "window_quota_limit 和 daily_quota_limit 均有 > 0 前置判断（0表示禁用），但 request_threshold 缺少该判断。设为0时本意'不限制'，实际效果为'每个窗口只允许0次请求'（第1次请求 count=1>0 即触发限速）",
+      "file": "backend/auth_module.py",
+      "fix": "添加 request_threshold > 0 前置判断，统一'0=禁用'语义"
+    }
+  ],
+  "config_changes": {
+    "runtime_config.json": {
+      "rate_limit": {
+        "window_minutes": 1,
+        "request_threshold": 5,
+        "downgraded_priority": 4,
+        "daily_quota_limit": 20,
+        "window_quota_limit": 0.36,
+        "window_quota_action": "limit",
+        "daily_quota_action": "limit"
+      }
+    }
+  },
+  "key_concepts": {
+    "day_boundary": "每日额度从凌晨1点起算，SQL: ((created_at AT TIME ZONE 'Asia/Shanghai') - interval '1 hour')::date",
+    "adjusted_now": "db_module.adjusted_now() = datetime.now() + timedelta(minutes=time_offset_minutes)，用于时间校准",
+    "priority_system": "优先级1-5，数字越小优先级越高。优先级1用户不受限速影响",
+    "quota_action_limit": "降级用户优先级至 downgraded_priority（默认4）",
+    "quota_action_reject": "设置 _quota_rejected=True，middleware 直接返回429错误",
+    "rate_limit_flow": "authenticate_request → _with_effective_priority → 并行DB查询 → 设priority/_quota_rejected → middleware拦截或入队"
+  }
+}

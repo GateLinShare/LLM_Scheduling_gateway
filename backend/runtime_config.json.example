@@ -1,0 +1,77 @@
+{
+  "models": {
+    "example-multi-queue": {
+      "enabled": true,
+      "tokenizer_model": "gpt-3.5-turbo",
+      "api_key": "",
+      "price": {
+        "input_per_1k": 0.001,
+        "output_per_1k": 0.001,
+        "currency": "CNY"
+      },
+      "type": "multi-queue",
+      "queues": [
+        {
+          "queue_name": "example-multi-queue-1",
+          "api_url": "http://127.0.0.1:8102",
+          "api_key": "",
+          "model_name": "example-model",
+          "load_factor": 1
+        },
+        {
+          "queue_name": "example-multi-queue-2",
+          "api_url": "http://127.0.0.1:8103",
+          "api_key": "",
+          "model_name": "example-model",
+          "load_factor": 1
+        }
+      ],
+      "load_queue": "example-multi-queue-load-queue"
+    },
+    "example-chat": {
+      "enabled": true,
+      "tokenizer_model": "gpt-3.5-turbo",
+      "api_key": "",
+      "price": {
+        "input_per_1k": 0.001,
+        "output_per_1k": 0.001,
+        "currency": "CNY"
+      },
+      "api_url": "http://127.0.0.1:7102",
+      "model_name": "example-chat-model",
+      "queue_name": "example-chat"
+    }
+  },
+  "features": {
+    "auto_register_enabled": false
+  },
+  "token": {
+    "tiktoken_cache_dir": "./tiktoken-cache",
+    "default_tokenizer_model": "gpt-3.5-turbo"
+  },
+  "rate_limit": {
+    "request_threshold": 5,
+    "window_minutes": 2,
+    "downgraded_priority": 4
+  },
+  "system": {
+    "time_offset_minutes": 0
+  },
+  "scheduler": {
+    "timeouts": {
+      "high_priority": 600,
+      "low_priority": 7200
+    },
+    "gpu_threshold": 0.7,
+    "high_low_ratio": 5,
+    "sleep_interval": 0.2,
+    "min_waiting_requests": 2,
+    "max_pending_requests": 20,
+    "low_priority_max_pending": 3,
+    "default_priority": 3,
+    "priority_thresholds": {
+      "high_priority_max": 3,
+      "low_priority_min": 4
+    }
+  }
+}
