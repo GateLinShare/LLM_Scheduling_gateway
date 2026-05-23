@@ -122,7 +122,7 @@ class QueueMiddleware(BaseHTTPMiddleware):
         load_factor = 1.0
         if model_config.get("type") == "multi-queue":
             load_queue_key = model_config.get("load_queue", f"{model_name}-load-queue")
-            queue_name, load_factor = _choose_queue_by_load(model_config, load_queue_key)
+            queue_name, load_factor, _queue_config = _choose_queue_by_load(model_config, load_queue_key)
             # logger.info(f"[Gateway] 模型 {model_name} 选择队列: {queue_name}, load_factor: {load_factor}")
         else:
             load_queue_key = None
